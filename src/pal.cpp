@@ -1,4 +1,8 @@
+#ifdef CMAKE 
 #include "pal/pal.h"
+#else
+#include "pal.h"
+#endif
 #include "Arduino.h"
 
 #define bytesPerRow 8
