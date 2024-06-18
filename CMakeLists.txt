@@ -28,7 +28,7 @@ project(pal VERSION 0.0.1 DESCRIPTION "polarbub's Arduino library" LANGUAGES CXX
 #' src/[^\n ]*\.h'
 # Define a variable containing a list of source files for the project
 set(SRC_FILES
-        src/pal.cpp)
+        src/pal.cpp src/menu.c src/cserial.cpp)
 
 # Define the build target for the library
 add_library(${PROJECT_NAME} ${SRC_FILES})
@@ -37,3 +37,4 @@ target_link_libraries(${PROJECT_NAME} ${wxWidgets_LIBRARIES} ArduinoCoreCMake)
 
 #target is used to only effect this library.
 target_include_directories(${PROJECT_NAME} PUBLIC src/include)
+target_include_directories(${PROJECT_NAME} PRIVATE src)
