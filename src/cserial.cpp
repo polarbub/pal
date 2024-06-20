@@ -36,6 +36,10 @@ void serial_8_print(char toPrint) {
     Serial.print(toPrint);
 }
 
+void serial_8_println(char toPrint) {
+    Serial.println(toPrint);
+}
+
 void serial_u8_hex_println(uint8_t toPrint) {
     Serial.println(toPrint, HEX);
 }
