@@ -30,13 +30,15 @@ struct MenuEntry {
         inputAgain,
         //The callback here will print out the contents of the option without a trailing newline
         //The inputCallback will be used to parse user input
-        option
+        option,
+        //ADD: Support for the optionMenu
+        //callback should print the contents of the option without a trailing newline
+        optionMenu
     } mode;
     const char *name;
     const char *description;
     void (*callback)(struct MenuEntry *This);
-    //FIX: Handle when we get more input than the buffer is big
-    bool (*inputCallback)(struct MenuEntry *This, char* input/* , bool finished */);
+    bool (*inputCallback)(struct MenuEntry *This, char* input, bool finished);
     struct MenuEntry **subMenu;
     uint8_t subMenuCount;
 
@@ -44,6 +46,19 @@ struct MenuEntry {
     struct MenuEntry *superMenu;
 };
 
+enum SetupMenuReturnValues {
+    success = 0,
+    // root menuEntry is not in menu mode
+    rootMenuIsntMenu = 1,
+    // a menu mode menuEntry has no children
+    menuHasNoChildren = 2,
+    optionSupermenuNotMenu = 3,
+    menuSupermenuNotMenu = 4, 
+    inputSuperMenuNotMenuOrInputAgain = 5, 
+};
+
 EXTERNC void tickMenu(void);
 
-EXTERNC uint8_t setupMenu(struct MenuEntry *rootMenu);
+EXTERNC enum SetupMenuReturnValues setupMenu(struct MenuEntry *rootMenu);
+
+EXTERNC const char* strErrorSetupMenu(enum SetupMenuReturnValues errorNo);

@@ -24,44 +24,33 @@ static char inputBuffer[MENU_INPUT_BUFFER+1];
 static uint16_t inputBufferLocation;
 
 void printMenuOptions(struct MenuEntry *menuEntry) {
+    if(menuEntry->mode != menu) {
+        return;
+    }
+    // if(menuEntry->mode != optionMenu) {
+    //     return;
+    // }
+
     serial_8_print('\n');
     serial_println(menuEntry->description);
 
-    if(menuEntry->superMenu != 0) {
-        serial_print("0) Go back to ");
-        serial_println(menuEntry->superMenu->name);
-    }
-    
-    if(menuEntry->mode == menu) {
-        for (uint8_t i = 0; i < menuEntry->subMenuCount; i++) {
-            struct MenuEntry *subMenu = menuEntry->subMenu[i];
-            serial_u8_print(i + 1);
-            serial_print(") ");
-            serial_print(subMenu->name);
+    for (uint8_t i = 0; i < menuEntry->subMenuCount; i++) {
+        struct MenuEntry *subMenu = menuEntry->subMenu[i];
+        serial_u8_print(i + 1);
+        serial_print(") ");
+        serial_print(subMenu->name);
 
-            if(subMenu->mode == option) {
-                serial_print(" (");
-                subMenu->callback(subMenu);
-                serial_8_print(')');
-            }
-
-            serial_8_print('\n');
+        if(subMenu->mode == option /* || subMenu->mode == optionMenu */) {
+            serial_print(" (");
+            subMenu->callback(subMenu);
+            serial_8_print(')');
         }
+
+        serial_8_print('\n');
     }
-    
+
     serial_print("> ");
 }
-
-// switch (currentMenu->mode) {
-//         case menu:
-//         break;
-//         case action:
-//         break;
-//         case inputCallback:
-//         break;
-//         case inputAgain:
-//         break;
-// }
 
 void tickMenu(void) {
     int in = serial_read();
@@ -71,20 +60,15 @@ void tickMenu(void) {
     }
 
     char c = in;
-    if(c == '\n') {
+    if(c == '\n' || inputBufferLocation == MENU_INPUT_BUFFER) {
+        serial_8_print('\n');
         inputBuffer[inputBufferLocation] = 0;
         //When the menu gets a newline
         switch (currentMenu->mode) {
             case menu:
-            if(inputBufferLocation == 1 && isdigit((c = inputBuffer[inputBufferLocation-1])) > 0) {
-                c -= 0x30;
-                
-                if(currentMenu->superMenu != 0 && c == 0) {
-                    currentMenu = currentMenu->superMenu;
-                } else if(c > 0 && c <= currentMenu->subMenuCount) {
-                    currentMenu = currentMenu->subMenu[c-1];
-                }
-
+            //FIX: Only 9 submenus can be accessed
+            if(inputBufferLocation == 1 && isdigit((c = inputBuffer[inputBufferLocation-1])) > 0 && (c-= 0x30) > 0 && c <= currentMenu->subMenuCount) {
+                currentMenu = currentMenu->subMenu[c-1];
                 //When the menu gets selected
                 switch (currentMenu->mode) {
                     case menu:
@@ -117,16 +101,18 @@ void tickMenu(void) {
                     serial_8_print('\n');
                     serial_print("> ");
                     break;
+
+                    case optionMenu:
+                    break;
                 }
             } else {
                 serial_print("> ");
             }
-            
             break;
             
             case input:
             //The == true is needed here for whatever reason
-            if(currentMenu->inputCallback(currentMenu, inputBuffer) == true) {
+            if(currentMenu->inputCallback(currentMenu, inputBuffer, inputBufferLocation == MENU_INPUT_BUFFER) == true) {
                 currentMenu = rootMenu;
                 printMenuOptions(currentMenu);  
             } else {
@@ -135,7 +121,7 @@ void tickMenu(void) {
             break;
 
             case inputAgain:
-            if(currentMenu->inputCallback(currentMenu, inputBuffer) == true) {
+            if(currentMenu->inputCallback(currentMenu, inputBuffer, inputBufferLocation == MENU_INPUT_BUFFER) == true) {
 
                 currentMenu = currentMenu->subMenu[0];
                 serial_8_print('\n');
@@ -147,47 +133,94 @@ void tickMenu(void) {
             break;
             
             case option:
-            if(currentMenu->inputCallback(currentMenu, inputBuffer) == true) {
+            if(currentMenu->inputCallback(currentMenu, inputBuffer, inputBufferLocation == MENU_INPUT_BUFFER) == true) {
                 currentMenu = currentMenu->superMenu;
                 printMenuOptions(currentMenu);  
             } else {
                 serial_print("> ");
             }
             break;
+
+            case optionMenu:
+            break;
+
+            case action:
+            break;
         }
         inputBufferLocation = 0;
-        
-    //ADD: Handling for ASCII escape codes
-    //ADD: Control-C breaks out of options and inputs
+    
     } else if(c == 0x7F) {
         if(inputBufferLocation > 0) {
             inputBuffer[inputBufferLocation] = 0;
             inputBufferLocation--;
-            serial_8_print(' ');
-            serial_8_print(0x08);
-        } else {
-            serial_8_print(' ');
+            serial_print("\x08 \x08");
         }
-    } else {
+
+    } else if(c == 0x03) {
+        
+        switch (currentMenu->mode) {
+            case menu:
+                if(currentMenu->superMenu != 0) {
+                    serial_8_print('\n');
+                    currentMenu = currentMenu->superMenu;
+                    printMenuOptions(currentMenu);
+                }
+            break;
+
+            case input:
+            case inputAgain:
+            case option:
+            serial_8_print('\n');
+            inputBufferLocation = 0;
+            while(currentMenu->mode != menu) {
+                currentMenu = currentMenu->superMenu;
+            }
+
+            printMenuOptions(currentMenu);  
+            break;
+
+            case optionMenu:
+            break;
+
+            case action:
+            break;
+        }
+
+    } else if(isprint(c) != 0) {
         if(inputBufferLocation < MENU_INPUT_BUFFER) {
+            serial_8_print(c);
             inputBuffer[inputBufferLocation] = c;
             inputBufferLocation++;
-        } //FIX: Deal with when the input buffer runs out
+        }
     }
 }
 
-//ADD: Some way of converting the SetupMenuReturnValues to strings
-enum SetupMenuReturnValues {
-    success = 0,
-    // root menuEntry is not in menu mode
-    rootMenuIsntMenu = 1,
-    // a menu mode menuEntry has no children
-    menuHasNoChildren = 2,
-    optionSupermenuNotMenu = 3,
-    menuSupermenuNotMenu = 4, 
-};
+const char* strErrorSetupMenu(enum SetupMenuReturnValues returnValue) {
+    switch (returnValue) {
+        case success:
+        return "Success";
 
-uint8_t setupMenu(struct MenuEntry *newRootMenu) {
+        case rootMenuIsntMenu:
+        return "The root MenuEntry's mode isn't menu";
+
+        case menuHasNoChildren:
+        return "A MenuEntry type that requires children doesn't have any";
+
+        case optionSupermenuNotMenu:
+        return "The super menu of a option mode MenuEntry isn't in menu mode";
+
+        case menuSupermenuNotMenu:
+        return "The super menu of a menu mode MenuEntry isn't in menu mode";
+
+        case inputSuperMenuNotMenuOrInputAgain:
+        return "The super menu of a input or inputAgain mode MenuEntry isn't in menu or inputAgain mode";
+
+        default:
+        return "No string for this error number";
+    }
+}
+
+enum SetupMenuReturnValues setupMenu(struct MenuEntry *newRootMenu) {
     inputBufferLocation = 0;
     inputBuffer[MENU_INPUT_BUFFER] = 0;
     rootMenu = newRootMenu;
@@ -238,12 +271,14 @@ uint8_t setupMenu(struct MenuEntry *newRootMenu) {
 
             case input:
             subMenu->callback = 0;
+            if(!(currentMenu->mode == menu || currentMenu->mode == inputAgain)) return inputSuperMenuNotMenuOrInputAgain;
             subMenu->subMenu = 0;
             subMenu->subMenuCount = 0;
             break;
         
             case inputAgain:
             if(subMenu->subMenuCount == 0) return menuHasNoChildren;
+            if(!(currentMenu->mode == menu || currentMenu->mode == inputAgain)) return inputSuperMenuNotMenuOrInputAgain;
             subMenu->callback = 0;
             subMenu->subMenuCount = 1;
             break;
@@ -252,6 +287,9 @@ uint8_t setupMenu(struct MenuEntry *newRootMenu) {
             if(currentMenu->mode != menu) return optionSupermenuNotMenu;
             subMenu->subMenu = 0;
             subMenu->subMenuCount = 0;
+            break;
+
+            case optionMenu:
             break;
         }
 
