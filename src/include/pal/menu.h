@@ -31,8 +31,7 @@ struct MenuEntry {
         //The callback here will print out the contents of the option without a trailing newline
         //The inputCallback will be used to parse user input
         option,
-        //ADD: Support for the optionMenu
-        //callback should print the contents of the option without a trailing newline
+        //callback should print the contents of the option without a trailing newline.
         optionMenu
     } mode;
     const char *name;
@@ -62,3 +61,42 @@ EXTERNC void tickMenu(void);
 EXTERNC enum SetupMenuReturnValues setupMenu(struct MenuEntry *rootMenu);
 
 EXTERNC const char* strErrorSetupMenu(enum SetupMenuReturnValues errorNo);
+
+#ifdef __cplusplus
+//Sorry about your sanity
+#define optionMenuEnumMakerMain(enum, menuName, menuDescription, ...) \
+MenuEntry* enum##SubMenus [] = { __VA_ARGS__ }; \
+MenuEntry enum##Menu = { \
+    .mode=MenuEntry::optionMenu, \
+    .name=menuName, \
+    .description=menuDescription, \
+    .callback=[] (MenuEntry* menuEntry) { \
+        Serial.print(menuEntry->subMenu[enum]->name); \
+    }, \
+    .subMenu=enum##SubMenus, \
+    .subMenuCount=pal_getArrayLength(enum##SubMenus), \
+};
+
+#define optionMenuEnumMakerSub(enum, option, stringName) \
+MenuEntry option##enum##Menu = { \
+    .mode=MenuEntry::action, \
+    .name=stringName, \
+    .callback=[] (MenuEntry* This) { \
+        enum = option; \
+    } \
+}; \
+
+#define optionMenuEnumMaker1(enum, menuName, menuDescription, option1, name1) \
+optionMenuEnumMakerSub(enum, option1, name1) \
+optionMenuEnumMakerMain(enum, menuName, menuDescription, &option1##enum##Menu)
+
+#define optionMenuEnumMaker4(enum, menuName, menuDescription, option1, name1, option2, name2, option3, name3, option4, name4) \
+optionMenuEnumMakerSub(enum, option1, name1) \
+optionMenuEnumMakerSub(enum, option2, name2) \
+optionMenuEnumMakerSub(enum, option3, name3) \
+optionMenuEnumMakerSub(enum, option4, name4) \
+optionMenuEnumMakerMain(enum, menuName, menuDescription, &option1##enum##Menu,&option2##enum##Menu,&option3##enum##Menu,&option4##enum##Menu)
+
+#undef optionMenuMainMenu
+#undef optionMenuMainSub
+#endif
